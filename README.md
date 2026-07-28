@@ -12,7 +12,13 @@
 - [02-ZooKeeper-Distributed-Lock.md](./distributed-lock-notes/02-ZooKeeper-Distributed-Lock.md)
 - [03-etcd-and-Raft.md](./distributed-lock-notes/03-etcd-and-Raft.md)
 
-後續可以繼續新增其他主題（一致性協議、服務發現、分散式事務…等）。
+### [transactions-notes](./transactions-notes/)
+
+單一節點事務隔離層級與併發異常（DDIA Ch.7）：
+
+- [01-Transaction-Isolation.md](./transactions-notes/01-Transaction-Isolation.md)
+
+後續可以繼續新增其他主題（分散式事務 2PC/TCC/Saga、服務發現、一致性協議…等）。
 
 ---
 

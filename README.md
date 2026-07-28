@@ -14,9 +14,11 @@
 
 ### [transactions-notes](./transactions-notes/)
 
-單一節點事務隔離層級與併發異常（DDIA Ch.7）：
+單一節點事務隔離層級、併發異常、鎖機制與死鎖（DDIA Ch.7）：
 
 - [01-Transaction-Isolation.md](./transactions-notes/01-Transaction-Isolation.md)
+- [02-Pessimistic-and-Optimistic-Locking.md](./transactions-notes/02-Pessimistic-and-Optimistic-Locking.md)
+- [03-Deadlocks.md](./transactions-notes/03-Deadlocks.md)
 
 後續可以繼續新增其他主題（分散式事務 2PC/TCC/Saga、服務發現、一致性協議…等）。
 

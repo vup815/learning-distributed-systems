@@ -274,13 +274,13 @@ sequenceDiagram
 | 有複雜不變式（至少一人值班、唯一性約束等） | Serializable 或顯式鎖定 | Write Skew 是隱形殺手 |
 | 金融核心、帳務系統 | Serializable + 充分測試 | 正確性優先於效能 |
 
-**應用層常見應對策略**：
+**應用層常見應對策略**（詳細實作見後續筆記）：
 
-1. **樂觀併發控制**：讀取時帶 version / etag，寫入時用 `WHERE version = ?`，失敗就重試。
-2. **顯式鎖定**：`SELECT ... FOR UPDATE`（要小心死鎖與長時間持鎖）。
-3. **原子操作**：能用 `UPDATE ... SET x = x + 1` 就不要用 read-modify-write。
-4. **物化衝突**：把「至少一人 on-call」改成單一計數器 row，強制產生寫寫衝突。
-5. **重試邏輯**：遇到 serialization failure 或 version conflict，自動重試（要注意冪等）。
+1. **樂觀鎖**（Version 欄位 + 重試）→ 見 [02-Pessimistic-and-Optimistic-Locking.md](./02-Pessimistic-and-Optimistic-Locking.md)
+2. **悲觀鎖**（`SELECT ... FOR UPDATE` / `FOR SHARE`）→ 見同上
+3. **原子操作**：能用 `UPDATE ... SET x = x + 1` 就不要用 read-modify-write
+4. **物化衝突**：把「至少一人 on-call」改成單一計數器 row → 見 02 筆記
+5. **死鎖處理**：統一鎖順序 + 應用層重試 → 見 [03-Deadlocks.md](./03-Deadlocks.md)
 
 ---
 
@@ -311,6 +311,8 @@ sequenceDiagram
 - [ ] 能說出至少三種防止 Lost Update 的方法
 - [ ] 能畫出醫生值班的 Write Skew 時序圖
 - [ ] 知道 SSI 是目前較實用的 Serializable 實作
+- [ ] 能區分悲觀鎖與樂觀鎖，並知道各自適用場景（見 02 筆記）
+- [ ] 知道死鎖的常見原因與預防方法（見 03 筆記）
 
 ---
 

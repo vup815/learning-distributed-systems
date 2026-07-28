@@ -250,11 +250,78 @@ sequenceDiagram
 
 ### 4.3 Serializable Snapshot Isolation（SSI）
 
-- 在 Snapshot Isolation 之上增加**衝突偵測**
-- 追蹤「讀取依賴」與「寫入依賴」
-- 發現可能產生循環（非可序列化）時，abort 其中一個事務
-- PostgreSQL 從 9.1 開始支援（`SERIALIZABLE`）
-- 比傳統 2PL 效能好很多，是目前實務上較佳的 Serializable 實作
+SSI = **Snapshot Isolation + 執行時偵測 rw-衝突（anti-dependencies）**。
+
+核心觀察（Cahill et al. 2008）：Snapshot Isolation 下所有序列化異常，都對應到 dependency graph 中的一個「危險結構」（dangerous structure）：
+
+```text
+Tin  --rw-->  Tpivot  --rw-->  Tout
+```
+
+只要偵測並打破這種「兩個相鄰的 rw-衝突」，就能保證可序列化（可能有少數 false positive）。
+
+PostgreSQL 從 9.1 起，`SERIALIZABLE` 就是用 SSI 實作（`REPEATABLE READ` 仍是普通 SI）。
+
+#### 4.3.1 什麼是 rw-衝突（rw-antidependency）？
+
+- 事務 T1 **讀取**了某個物件的某個版本
+- 事務 T2（與 T1 併發）**寫入**了同一個物件的更新版本
+- 則產生 T1 --rw--> T2（T1 在序列順序上應出現在 T2 **之前**，因為 T1 沒看到 T2 的寫入）
+
+SSI **只追蹤 rw-衝突**，不需要完整追蹤 wr / ww 依賴（因為 SI 本身已經處理了大部分寫寫衝突）。
+
+#### 4.3.2 兩種偵測 rw-衝突的方式
+
+##### 1. Detecting stale MVCC reads（偵測過期的 MVCC 讀取）
+
+當「寫入發生在讀取之前，或讀取時已經能看到更新版本的痕跡」時使用。
+
+- 事務在讀取 tuple 時，會依 MVCC 規則檢查 `xmin` / `xmax`
+- 如果發現：
+  - 這個版本是由一個**併發事務**寫入的（但對自己的 snapshot 還不可見），或
+  - 這個版本已被一個併發事務刪除／更新（`xmax` 指向併發事務，但刪除對自己 snapshot 還不可見）
+- 則判定為 **stale read** → 產生 rw-衝突：讀取者 --rw--> 寫入者
+
+這部分可以直接利用既有的 MVCC 可見性檢查，幾乎零額外成本。
+
+##### 2. Detecting writes that affect prior reads（偵測影響先前讀取的寫入）
+
+當「讀取發生在寫入之前」時使用。
+
+- 每個 Serializable 事務在**讀取**資料時，會在讀到的物件上取得 **SIREAD lock**（也稱為 predicate lock）
+  - SIREAD lock **不會阻塞任何人**（真正的 non-blocking）
+  - 可以加在 tuple、page 或整個 relation 層級（記憶體不足時會向上聚合）
+- 當事務要**寫入**（INSERT / UPDATE / DELETE）時，檢查目標物件上是否已有其他併發事務的 SIREAD lock
+- 如果有 → 產生 rw-衝突：先前的讀取者 --rw--> 目前的寫入者
+
+這解決了「讀完之後別人才寫」的情況（經典 Write Skew 就是這種）。
+
+#### 4.3.3 危險結構的判斷與 abort
+
+每個事務會記錄自己是否有：
+
+- **in-conflict**（有其他事務對我產生 rw-衝突，即有人讀了我寫的資料）
+- **out-conflict**（我對其他事務產生 rw-衝突，即我讀了別人寫的資料）
+
+當一個事務同時具備 in-conflict 與 out-conflict（它成為 Tpivot），且符合 commit 順序條件時，系統會 abort 其中一個事務（通常採「first-committer-wins」風格，確保被 abort 的事務重試時不會再跟已 commit 的事務衝突）。
+
+應用層會收到類似錯誤：
+
+```text
+ERROR: could not serialize access due to read/write dependencies among transactions
+```
+
+必須像樂觀鎖一樣**重試整個事務**。
+
+#### 4.3.4 SSI 的優點與代價
+
+| 項目 | 說明 |
+|------|------|
+| 優點 | 讀不阻塞寫、寫不阻塞讀；效能接近普通 Snapshot Isolation；真正可序列化 |
+| 代價 | 需要維護 SIREAD lock；可能有 false positive（記憶體壓力導致 lock 升級到 page/relation 時更明顯） |
+| 實務 | 應用必須準備好處理 serialization failure 並重試 |
+
+> **與 2PL 的對比**：2PL 用真實的共享/排他鎖來*預防*衝突；SSI 用非阻塞的 SIREAD lock + 衝突偵測來*發現*可能的異常後再 abort。因此 SSI 在讀多寫少或衝突不密集的場景通常有更好的吞吐量。
 
 ### 4.4 真正的串行執行
 
@@ -311,6 +378,8 @@ sequenceDiagram
 - [ ] 能說出至少三種防止 Lost Update 的方法
 - [ ] 能畫出醫生值班的 Write Skew 時序圖
 - [ ] 知道 SSI 是目前較實用的 Serializable 實作
+- [ ] 能說明 SSI 如何用「stale MVCC reads」與「SIREAD lock」偵測 rw-衝突
+- [ ] 知道危險結構（Tin --rw--> Tpivot --rw--> Tout）的意義
 - [ ] 能區分悲觀鎖與樂觀鎖，並知道各自適用場景（見 02 筆記）
 - [ ] 知道死鎖的常見原因與預防方法（見 03 筆記）
 

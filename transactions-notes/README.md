@@ -8,7 +8,7 @@
 
 | 檔案 | 內容 |
 |------|------|
-| [01-Transaction-Isolation.md](./01-Transaction-Isolation.md) | ACID、六大併發異常（含時序圖）、隔離層級對照表、MVCC / 2PL / SSI |
+| [01-Transaction-Isolation.md](./01-Transaction-Isolation.md) | ACID、六大併發異常（含時序圖）、隔離層級對照表、MVCC / 2PL / **SSI 實作細節**（stale reads、SIREAD lock） |
 | [02-Pessimistic-and-Optimistic-Locking.md](./02-Pessimistic-and-Optimistic-Locking.md) | 悲觀鎖（FOR UPDATE / FOR SHARE）、樂觀鎖（Version）、物化衝突、選型比較 |
 | [03-Deadlocks.md](./03-Deadlocks.md) | 死鎖原因、偵測、預防與應用層重試 |
 
